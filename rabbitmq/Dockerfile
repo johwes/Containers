@@ -5,11 +5,9 @@ FROM rabbitmq:3.7-management-alpine
  
 
 RUN mkdir -p /data/mnesia && \
-
     mkdir -p /data/logs && \
-
-    chown -R rabbitmq:rabbitmq /data
-
+    chown -R rabbitmq:0 /data && \
+    chmod -R g=u /data
  
 
 env RABBITMQ_MNESIA_BASE /data/mnesia

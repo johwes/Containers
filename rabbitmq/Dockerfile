@@ -11,7 +11,7 @@ RUN mkdir -p /data/mnesia && \
  
 
 env RABBITMQ_MNESIA_BASE /data/mnesia
-
+env RABBITMQ_IO_THREAD_POOL_SIZE=128
 env RABBITMQ_LOG_BASE /data/logs
 
  

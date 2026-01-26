@@ -1,0 +1,16 @@
+# Stage 1: Build
+FROM registry.redhat.io/ubi9/go-toolset:latest AS builder
+USER root
+WORKDIR /app
+COPY main.go main.go
+RUN go mod init k8s-demo && go mod tidy
+RUN CGO_ENABLED=0 GOOS=linux go build -o demo-app main.go
+
+# Stage 2: Final Image
+FROM registry.redhat.io/ubi9/ubi:9.7
+WORKDIR /root/
+COPY --from=builder /app/demo-app .
+# Ensure the app has permissions to run
+RUN chmod +x ./demo-app
+EXPOSE 8080
+CMD ["./demo-app"]

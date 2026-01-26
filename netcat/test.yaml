@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nonroot-setambient
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: nonroot-setambient
+  template:
+    metadata:
+      labels:
+        name: nonroot-setambient
+    spec:
+      containers:
+        - name: nonroot-setambient
+          image: quay.io/acmenezes/nc-setambient:test
+          imagePullPolicy: Always
+          securityContext:
+            capabilities:
+              add:
+              - NET_BIND_SERVICE
+

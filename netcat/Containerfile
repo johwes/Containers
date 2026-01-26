@@ -1,0 +1,3 @@
+FROM registry.access.redhat.com/ubi9/ubi 
+RUN dnf -y install nc libcap-ng &&  dnf -y clean all && setcap 'cap_net_bind_service+eip' /usr/bin/ncat
+CMD ncat -l 8080

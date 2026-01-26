@@ -1,0 +1,180 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"strconv"
+	"sync"
+	"time"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+)
+
+type PodDetail struct {
+	Name string
+	Node string
+}
+
+type WorkloadInfo struct {
+	Kind      string
+	KindName  string
+	RSName    string
+	Pods      []PodDetail
+	LastError error
+}
+
+var (
+	data WorkloadInfo
+	mu   sync.RWMutex
+)
+
+func main() {
+	podName := os.Getenv("POD_NAME")
+	namespace := os.Getenv("POD_NAMESPACE")
+	retryStr := os.Getenv("API_RETRY")
+	retry, _ := strconv.Atoi(retryStr)
+	if retry <= 0 {
+		retry = 5
+	}
+
+	// Start background monitor
+	go monitor(podName, namespace, time.Duration(retry)*time.Second)
+
+	// --- ROUTE: SELF DESTRUCT ---
+	http.HandleFunc("/crash", func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("!!! SELF-DESTRUCT TRIGGERED BY %s !!!", r.RemoteAddr)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprintf(w, "<html><body style='font-family:sans-serif;text-align:center;padding-top:100px;'>")
+		fmt.Fprintf(w, "<h1>💥 Goodbye, World!</h1><p>Pod <b>%s</b> is crashing...</p>", podName)
+		fmt.Fprintf(w, "<p>Kubernetes will recreate this pod shortly.</p></body></html>")
+		go func() {
+			time.Sleep(2 * time.Second)
+			os.Exit(1)
+		}()
+	})
+
+	// --- ROUTE: MAIN UI ---
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		mu.RLock()
+		defer mu.RUnlock()
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+		fmt.Fprint(w, "<!DOCTYPE html><html><head><meta charset='UTF-8'>")
+		fmt.Fprint(w, "<title>K8s Inspector</title>")
+		fmt.Fprint(w, "<style>")
+		fmt.Fprint(w, "body{font-family:sans-serif;background:#f4f7f9;padding:30px;color:#2d3748;}")
+		fmt.Fprint(w, ".card{max-width:950px;margin:auto;background:white;padding:40px;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,0.1);}")
+		fmt.Fprint(w, "table{width:100%;border-collapse:collapse;margin-top:20px;}")
+		fmt.Fprint(w, "th{text-align:left;padding:15px;border-bottom:2px solid #edf2f7;color:#718096;text-transform:uppercase;font-size:0.8rem;letter-spacing:1px;}")
+		fmt.Fprint(w, "td{padding:18px 15px;border-bottom:1px solid #edf2f7;font-family:'Courier New', monospace; font-size: 1rem;}")
+		fmt.Fprint(w, ".current-row{background:#ebf8ff;color:#3182ce;font-weight:bold;}")
+		fmt.Fprint(w, ".icon-box{display:inline-block;width:24px;height:24px;vertical-align:middle;margin-right:12px;overflow:visible;}")
+		fmt.Fprint(w, ".btn-crash{background:#e53e3e;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:30px;font-weight:bold;transition:background 0.2s;}")
+		fmt.Fprint(w, ".btn-crash:hover{background:#c53030;}")
+		fmt.Fprint(w, "code{background:#edf2f7;padding:3px 6px;border-radius:4px;font-weight:bold;}")
+		fmt.Fprint(w, "</style></head><body>")
+
+		fmt.Fprint(w, "<div class='card'>")
+		fmt.Fprint(w, "<h1 style='color:#2b6cb0;margin-top:0;'>K8s Workload Discovery</h1>")
+
+		if data.LastError != nil {
+			fmt.Fprintf(w, "<div style='background:#fff5f5;border-left:4px solid #f56565;padding:15px;color:#c53030;'><b>RBAC Error:</b> %v</div>", data.LastError)
+		} else {
+			fmt.Fprintf(w, "<p><b>Workload Kind:</b> %s</p>", data.Kind)
+			fmt.Fprintf(w, "<p><b>Name of %s:</b> <code>%s</code></p>", data.Kind, data.KindName)
+			if data.RSName != "" {
+				fmt.Fprintf(w, "<p><b>ReplicaSet:</b> <code>%s</code></p>", data.RSName)
+			}
+
+			fmt.Fprint(w, "<table><thead><tr><th>Status</th><th>Pod Name</th><th>Node Assignment</th></tr></thead><tbody>")
+			for _, p := range data.Pods {
+				rowClass := ""
+				iconColor := "#cbd5e0" // Grey for Peer
+				if p.Name == podName {
+					rowClass = "current-row"
+					iconColor = "#3182ce" // Blue for Current
+				}
+
+				// High-visibility SVG dot with extra padding (viewBox) to prevent truncation
+				icon := fmt.Sprintf(`
+					<span class="icon-box">
+						<svg viewBox="-2 -2 28 28" fill="%s" xmlns="http://www.w3.org/2000/svg">
+							<circle cx="12" cy="12" r="11" />
+						</svg>
+					</span>`, iconColor)
+
+				fmt.Fprintf(w, "<tr class='%s'><td>%s</td><td>%s</td><td>%s</td></tr>", rowClass, icon, p.Name, p.Node)
+			}
+			fmt.Fprint(w, "</tbody></table>")
+
+			fmt.Fprintf(w, "<a href='/crash' class='btn-crash'>💥 CRASH THIS POD</a>")
+		}
+		fmt.Fprintf(w, "<p style='font-size:0.75rem;color:#a0aec0;margin-top:25px;'>Refresh Interval: %ds | Last Sync: %s</p>", retry, time.Now().Format("15:04:05"))
+		fmt.Fprint(w, "</div></body></html>")
+	})
+
+	log.Printf("Inspector App listening on :8080...")
+	log.Fatal(http.ListenAndServe(":8080", nil))
+}
+
+func monitor(podName, ns string, interval time.Duration) {
+	for {
+		info := fetch(podName, ns)
+		mu.Lock()
+		data = info
+		mu.Unlock()
+		time.Sleep(interval)
+	}
+}
+
+func fetch(podName, ns string) WorkloadInfo {
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		return WorkloadInfo{LastError: err}
+	}
+	client, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return WorkloadInfo{LastError: err}
+	}
+
+	p, err := client.CoreV1().Pods(ns).Get(context.Background(), podName, metav1.GetOptions{})
+	if err != nil {
+		return WorkloadInfo{LastError: err}
+	}
+
+	var selector string
+	var info WorkloadInfo
+	for _, o := range p.OwnerReferences {
+		if o.Kind == "StatefulSet" {
+			ss, _ := client.AppsV1().StatefulSets(ns).Get(context.Background(), o.Name, metav1.GetOptions{})
+			selector = metav1.FormatLabelSelector(ss.Spec.Selector)
+			info = WorkloadInfo{Kind: "StatefulSet", KindName: o.Name}
+		} else if o.Kind == "ReplicaSet" {
+			rs, _ := client.AppsV1().ReplicaSets(ns).Get(context.Background(), o.Name, metav1.GetOptions{})
+			for _, ro := range rs.OwnerReferences {
+				if ro.Kind == "Deployment" {
+					info = WorkloadInfo{Kind: "Deployment", KindName: ro.Name, RSName: rs.Name}
+					selector = metav1.FormatLabelSelector(rs.Spec.Selector)
+				}
+			}
+		} else if o.Kind == "DaemonSet" {
+			ds, _ := client.AppsV1().DaemonSets(ns).Get(context.Background(), o.Name, metav1.GetOptions{})
+			selector = metav1.FormatLabelSelector(ds.Spec.Selector)
+			info = WorkloadInfo{Kind: "DaemonSet", KindName: o.Name}
+		}
+	}
+
+	if selector != "" {
+		pods, _ := client.CoreV1().Pods(ns).List(context.Background(), metav1.ListOptions{LabelSelector: selector})
+		for _, podItem := range pods.Items {
+			info.Pods = append(info.Pods, PodDetail{Name: podItem.Name, Node: podItem.Spec.NodeName})
+		}
+	}
+	return info
+}

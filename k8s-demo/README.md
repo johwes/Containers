@@ -5,3 +5,9 @@ In openshift i used,
 ```
 oc adm policy add-role-to-user view -z default
 ```
+
+Image is built and pushed here,
+```
+https://quay.io/repository/jwesterl/k8s-demo
+```
+

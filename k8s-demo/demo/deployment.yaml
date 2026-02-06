@@ -1,0 +1,65 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: deployment-web
+  labels:
+    app: deployment-web
+spec:
+  ports:
+  - port: 8080
+    name: deployment-web
+  clusterIP:
+  selector:
+    app: deployment-web
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  labels:
+    app: deployment-web
+  name: route-deployment
+spec:
+  port:
+    targetPort: deployment-web
+  to:
+    kind: Service
+    name: deployment-web
+    weight: 100
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: deployment-web
+  name: deployment-web
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: deployment-web
+  template:
+    metadata:
+      labels:
+        app: deployment-web
+    spec:
+      containers:
+      - image: quay.io/jwesterl/k8s-demo:latest
+        name: k8s-demo
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        imagePullPolicy: Always

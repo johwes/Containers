@@ -1,0 +1,43 @@
+#Open a terminal, place it at the top, Watch resources as we create them.
+watch -n 1 "oc get pod,replicaset,deployment,statefulset,service,pvc -l 'app in (deployment-web,statefulset-web)'"
+
+#Create a new terminal below the one you created with the watch command, create our deployment.
+oc apply -f deployment.yaml
+
+##
+## Discuss Deployment, point out the replicaset and it's link to the deployment.
+## Also notice that the pods "just spun up" without order, and with random names, in contrast to satefulsets
+## A good practice is to define resource requests, let's do so, notice how a new replicaset is created with a new pod template with our resource "settings".
+## Again, notice how the resources are created and terminated.
+###
+
+#Defined resources, requests/limits
+oc set resources deployment/deployment-web --limits=memory=512Mi --requests=cpu=25m,memory=256Mi
+
+#Add liveness/readiness probes
+oc rollout pause deployment/deployment-web
+oc set probe deployment/deployment-web --readiness --failure-threshold=2 --initial-delay-seconds=10 --period-seconds=20 --get-url=http://:8080/readyz
+oc set probe deployment/deployment-web --liveness --failure-threshold=2 --initial-delay-seconds=10 --period-seconds=20 --get-url=http://:8080/healthz
+oc rollout resume deployment/deployment-web
+
+#Create a PVC requesting RWX File, so that we can consume the storage from our deployment
+oc apply -f pvc-development-web.yaml
+
+#Attach a preexisting pvc to the deployment web
+oc set volume deployment/deployment-web --add --name=volume-web -t pvc --claim-name=pvc-web-deployment --mount-path=/mnt
+
+#Remove the deployment
+oc delete -f deployment.yaml
+
+#Create StatefulSet
+oc apply -f statefulset.yaml
+
+##
+## Notice the difference in the rollout, including that each member of the statefulset gets it's own PVC/Data volume.
+## as opposed to the deployment individual ephemeral storage or shared PVC/Data volume.
+##
+
+#StatefulSet
+oc set probe statefulset/statefulset-web --liveness --initial-delay-seconds=5 --period-seconds=20 --get-url=http://:8080/healthz
+oc set probe statefulset/statefulset-web --readiness --initial-delay-seconds=5 --period-seconds=20 --get-url=http://:8080/readyz
+

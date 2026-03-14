@@ -11,13 +11,32 @@ oc apply -f deployment.yaml
 ## Again, notice how the resources are created and terminated.
 ###
 
+##
+## BEST PRACTICE: Pause rollouts when making multiple changes
+##
+## Why pause? Each `oc set` command that modifies the pod template triggers a new rollout,
+## which restarts all pods. Without pausing, running multiple commands would cause:
+##   - Multiple rollouts (pods restart multiple times)
+##   - Increased disruption to running services
+##   - Longer total time to apply all changes
+##
+## By pausing the deployment, making all changes, then resuming, you get:
+##   - ONE rollout with all changes batched together
+##   - Pods restart only once
+##   - More efficient and less disruptive to production workloads
+##
+
+#Pause the rollout to batch multiple configuration changes together
+oc rollout pause deployment/deployment-web
+
 #Defined resources, requests/limits
 oc set resources deployment/deployment-web --limits=memory=512Mi --requests=cpu=25m,memory=256Mi
 
 #Add liveness/readiness probes
-oc rollout pause deployment/deployment-web
 oc set probe deployment/deployment-web --readiness --failure-threshold=2 --initial-delay-seconds=10 --period-seconds=20 --get-url=http://:8080/readyz
 oc set probe deployment/deployment-web --liveness --failure-threshold=2 --initial-delay-seconds=10 --period-seconds=20 --get-url=http://:8080/healthz
+
+#Resume the rollout - all changes above will be applied in a single rollout
 oc rollout resume deployment/deployment-web
 
 #Create a PVC requesting RWX File, so that we can consume the storage from our deployment

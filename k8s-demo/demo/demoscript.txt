@@ -21,7 +21,7 @@ oc set probe deployment/deployment-web --liveness --failure-threshold=2 --initia
 oc rollout resume deployment/deployment-web
 
 #Create a PVC requesting RWX File, so that we can consume the storage from our deployment
-oc apply -f pvc-development-web.yaml
+oc apply -f pvc-web-deployment.yaml
 
 #Attach a preexisting pvc to the deployment web
 oc set volume deployment/deployment-web --add --name=volume-web -t pvc --claim-name=pvc-web-deployment --mount-path=/mnt

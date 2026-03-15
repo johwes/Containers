@@ -92,20 +92,42 @@ oc set resources deployment/deployment-web \
 
 ### 2.2 Add Health Probes
 
-Add both probes together (triggers one rollout):
+**BEST PRACTICE: Pause rollouts when making multiple changes**
+
+Each `oc set` command that modifies the pod template triggers a new rollout, which restarts all pods. Without pausing, running multiple commands would cause:
+- Multiple rollouts (pods restart multiple times)
+- Increased disruption to running services
+- Longer total time to apply all changes
+
+By pausing the deployment, making all changes, then resuming, you get:
+- **ONE** rollout with all changes batched together
+- Pods restart only once
+- More efficient and less disruptive to production workloads
+
+Pause the rollout, add both probes, then resume:
 ```bash
+# Pause the rollout to batch multiple configuration changes together
+oc rollout pause deployment/deployment-web
+
+# Add readiness probe
 oc set probe deployment/deployment-web \
   --readiness --failure-threshold=2 --initial-delay-seconds=10 --period-seconds=20 \
   --get-url=http://:8080/readyz
 
+# Add liveness probe
 oc set probe deployment/deployment-web \
   --liveness --failure-threshold=2 --initial-delay-seconds=10 --period-seconds=20 \
   --get-url=http://:8080/healthz
+
+# Resume the rollout - all changes above will be applied in a single rollout
+oc rollout resume deployment/deployment-web
 ```
 
 **Observe:**
-- Another new ReplicaSet (template changed again)
-- Rolling update again
+- Rollout was paused - no immediate pod changes when probes were added
+- After resume, **ONE** new ReplicaSet created with both probes configured
+- Single rolling update applies all changes at once
+- More efficient than two separate rollouts
 
 ### 2.3 Verify Probes Work
 

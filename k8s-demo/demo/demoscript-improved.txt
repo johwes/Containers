@@ -134,6 +134,38 @@ oc exec $POD -- curl -s http://localhost:8080/readyz && echo "✓ Readiness OK"
 ## - Pod name STAYS THE SAME (container restart, not pod replacement)
 ##
 
+#-------------------------------------------
+# 2.5 Demonstrate Graceful Shutdown (SIGTERM)
+#-------------------------------------------
+## The application handles SIGTERM gracefully with a 15-second shutdown window.
+## To see this in action, you need to delete the pod you're currently viewing.
+##
+## STEPS:
+## 1. In the browser dashboard, look at the pod table
+## 2. The row with the ORANGE/HIGHLIGHTED background is YOUR current pod
+## 3. Note the pod name (e.g., deployment-web-abc123-xyz45)
+## 4. Run the command below, replacing <pod-name> with your highlighted pod
+##
+## The sleep gives you 3 seconds to switch back to the browser to watch
+
+# Replace <pod-name> with the highlighted pod from the dashboard
+sleep 3 && oc delete pod <pod-name>
+
+## OBSERVE IN BROWSER:
+## - Immediately see "🛑 SIGTERM RECEIVED" overlay appear
+## - Message shows: "Pod is Terminating. Removing from LoadBalancer. Finishing work (15s)..."
+## - This demonstrates graceful shutdown - the app:
+##   1. Receives SIGTERM signal from Kubernetes
+##   2. Stops accepting new requests (readiness probe fails)
+##   3. Continues processing existing requests for 15 seconds
+##   4. Cleanly exits
+##
+## KEY POINT: Graceful shutdown prevents dropped requests during pod termination.
+## In production, this would be coordinated with:
+## - preStop hooks
+## - terminationGracePeriodSeconds (default 30s)
+## - Load balancer connection draining
+
 #===========================================
 # PART 3: PERSISTENT STORAGE (DEPLOYMENT)
 #===========================================

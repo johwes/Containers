@@ -197,6 +197,8 @@ sleep 3 && oc delete pod <pod-name>
 - terminationGracePeriodSeconds (default 30s)
 - Load balancer connection draining
 
+[Click here for more information on Graceful Shudown](GRACEFUL_SHUTDOWN_DEEP_DIVE.md)
+
 ---
 
 ## Part 3: Persistent Storage (Deployment)

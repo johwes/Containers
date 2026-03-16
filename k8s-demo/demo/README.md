@@ -1,4 +1,4 @@
-# K8s Demo: Deployments vs StatefulSets
+# K8s Demo: Deployments & StatefulSets
 **Resilience and Storage Patterns**
 
 This demo walks through Kubernetes concepts including Deployments, StatefulSets, health probes, graceful shutdown, and persistent storage patterns.

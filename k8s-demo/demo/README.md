@@ -8,9 +8,9 @@ This demo walks through Kubernetes concepts including Deployments, StatefulSets,
 ## Prerequisites
 
 ### Terminal Setup
-Open **TWO terminals** side-by-side:
-- **Terminal 1 (LEFT)**: Watch resources continuously
-- **Terminal 2 (RIGHT)**: Run commands
+Open **TWO terminals** side-by-side or 1 above and 1 below:
+- **Terminal 1 (LEFT / UP)**: Watch resources continuously
+- **Terminal 2 (RIGHT / DOWN)**: Run commands
 
 **Terminal 1:**
 ```bash
